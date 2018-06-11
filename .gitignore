@@ -22,3 +22,9 @@ nohup.out
 ssd-tensorflow.sublime-workspace
 ssd-tensorflow.sublime-project
 
+*~
+*.sw[po]
+*.DS_Store
+env
+tfrecords/*.tfrecord
+VOC2007/test
