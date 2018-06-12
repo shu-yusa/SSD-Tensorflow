@@ -28,3 +28,4 @@ ssd-tensorflow.sublime-project
 env
 tfrecords/*.tfrecord
 VOC2007/test
+VOC2007/trainval
