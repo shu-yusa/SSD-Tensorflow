@@ -155,6 +155,11 @@ def main(_):
                     common_queue_min=FLAGS.batch_size,
                     shuffle=False)
             # Get for SSD network: image, labels, bboxes.
+            # Examples in TFRecord are defined in
+            # datasets/pascalvoc_to_tfrecords._convert_to_example() and
+            # datasets/pascalvoc_common.get_split().
+            # Correspondence between the following keys and Examples is defined in
+            # datasets/pascalvoc_common.get_split().
             [image, shape, glabels, gbboxes] = provider.get(['image', 'shape',
                                                              'object/label',
                                                              'object/bbox'])
@@ -164,6 +169,7 @@ def main(_):
                 gdifficults = tf.zeros(tf.shape(glabels), dtype=tf.int64)
 
             # Pre-processing image, labels and bboxes.
+            # Adjust image size to (300, 300) or (512, 512).
             image, glabels, gbboxes, gbbox_img = \
                 image_preprocessing_fn(image, glabels, gbboxes,
                                        out_shape=ssd_shape,
@@ -172,10 +178,14 @@ def main(_):
                                        difficults=None)
 
             # Encode groundtruth labels and bboxes.
+            # length = number of feature maps = len(ssd_anchors)
             gclasses, glocalisations, gscores = \
                 ssd_net.bboxes_encode(glabels, gbboxes, ssd_anchors)
             batch_shape = [1] * 5 + [len(ssd_anchors)] * 3
 
+            # Flatten to 1D list of Tensors.
+            tensors = tf_utils.reshape_list([image, glabels, gbboxes, gdifficults, gbbox_img,
+                                       gclasses, glocalisations, gscores])
             # Evaluation batch.
             r = tf.train.batch(
                 tf_utils.reshape_list([image, glabels, gbboxes, gdifficults, gbbox_img,
@@ -233,10 +243,12 @@ def main(_):
             dict_metrics = {}
             # First add all losses.
             for loss in tf.get_collection(tf.GraphKeys.LOSSES):
-                dict_metrics[loss.op.name] = slim.metrics.streaming_mean(loss)
+                # dict_metrics[loss.op.name] = slim.metrics.streaming_mean(loss)
+                dict_metrics[loss.op.name] = tf.metrics.mean(loss)
             # Extra losses as well.
             for loss in tf.get_collection('EXTRA_LOSSES'):
-                dict_metrics[loss.op.name] = slim.metrics.streaming_mean(loss)
+                # dict_metrics[loss.op.name] = slim.metrics.streaming_mean(loss)
+                dict_metrics[loss.op.name] = tf.metrics.mean(loss)
 
             # Add metrics to summaries and Print on screen.
             for name, metric in dict_metrics.items():

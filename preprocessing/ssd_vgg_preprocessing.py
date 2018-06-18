@@ -319,6 +319,7 @@ def preprocess_for_eval(image, labels, bboxes,
         image = tf_image_whitened(image, [_R_MEAN, _G_MEAN, _B_MEAN])
 
         # Add image rectangle to bboxes.
+        # [ymin, xmin, ymax, xmax]
         bbox_img = tf.constant([[0., 0., 1., 1.]])
         if bboxes is None:
             bboxes = bbox_img

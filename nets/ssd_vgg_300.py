@@ -97,20 +97,26 @@ class SSDNet(object):
         no_annotation_label=21,
         feat_layers=['block4', 'block7', 'block8', 'block9', 'block10', 'block11'],
         feat_shapes=[(38, 38), (19, 19), (10, 10), (5, 5), (3, 3), (1, 1)],
+        # 0.15, 0.30, 0.45, 0.60, 0.75, 0.90
         anchor_size_bounds=[0.15, 0.90],
         # anchor_size_bounds=[0.20, 0.90],
+        # paper: 0.15, 0.30, 0.45, 0.6, 0.75, 0.9
+        # 0.07, 0.15, 0.33, 0.51, 0.69, 0.87, (1.05):
         anchor_sizes=[(21., 45.),
                       (45., 99.),
                       (99., 153.),
                       (153., 207.),
                       (207., 261.),
                       (261., 315.)],
+        # 0.1, 0.2, 0.37, 0.54, 0.71, 0.88, 1.05
         # anchor_sizes=[(30., 60.),
         #               (60., 111.),
         #               (111., 162.),
         #               (162., 213.),
         #               (213., 264.),
         #               (264., 315.)],
+        # with additional two scales (1, and sqrt(s_k * s_(k+1))),
+        # length becomes (4, 6, 6, 6, 4, 4)
         anchor_ratios=[[2, .5],
                        [2, .5, 3, 1./3],
                        [2, .5, 3, 1./3],
@@ -153,6 +159,7 @@ class SSDNet(object):
                     prediction_fn=prediction_fn,
                     reuse=reuse,
                     scope=scope)
+        # r is an array: [predictions, localisations, logits, end_points]
         # Update feature shapes (try at least!)
         if update_feat_shapes:
             shapes = ssd_feat_shapes_from_net(r[0], self.params.feat_shapes)
@@ -452,22 +459,27 @@ def ssd_net(inputs,
         net = slim.repeat(inputs, 2, slim.conv2d, 64, [3, 3], scope='conv1')
         end_points['block1'] = net
         net = slim.max_pool2d(net, [2, 2], scope='pool1')
+        # feature size: 150x150x64
         # Block 2.
         net = slim.repeat(net, 2, slim.conv2d, 128, [3, 3], scope='conv2')
         end_points['block2'] = net
         net = slim.max_pool2d(net, [2, 2], scope='pool2')
+        # feature size: 75x75x128
         # Block 3.
         net = slim.repeat(net, 3, slim.conv2d, 256, [3, 3], scope='conv3')
         end_points['block3'] = net
         net = slim.max_pool2d(net, [2, 2], scope='pool3')
+        # feature size: 38x38x256
         # Block 4.
         net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv4')
         end_points['block4'] = net
         net = slim.max_pool2d(net, [2, 2], scope='pool4')
+        # feature size: 19x19x512
         # Block 5.
         net = slim.repeat(net, 3, slim.conv2d, 512, [3, 3], scope='conv5')
         end_points['block5'] = net
         net = slim.max_pool2d(net, [3, 3], stride=1, scope='pool5')
+        # feature size: 19x19x512
 
         # Additional SSD blocks.
         # Block 6: let's dilate the hell out of it!
@@ -514,6 +526,7 @@ def ssd_net(inputs,
                                           anchor_sizes[i],
                                           anchor_ratios[i],
                                           normalizations[i])
+            # prediction_fn: softmax
             predictions.append(prediction_fn(p))
             logits.append(p)
             localisations.append(l)
