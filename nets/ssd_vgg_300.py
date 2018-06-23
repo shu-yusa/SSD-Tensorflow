@@ -102,6 +102,7 @@ class SSDNet(object):
         # anchor_size_bounds=[0.20, 0.90],
         # paper: 0.15, 0.30, 0.45, 0.6, 0.75, 0.9
         # 0.07, 0.15, 0.33, 0.51, 0.69, 0.87, (1.05):
+        # Corresponding anchor sizes in 300x300 image.
         anchor_sizes=[(21., 45.),
                       (45., 99.),
                       (99., 153.),
@@ -245,6 +246,21 @@ class SSDNet(object):
                label_smoothing=0.,
                scope='ssd_losses'):
         """Define the SSD network losses.
+        Args:
+            logits: Logit outputs for classes from the feature maps.
+                    A tensor list of:
+                    [[1, 38, 38, 4, 21], [1, 19, 19, 6, 21], [1, 10, 10, 6, 21],
+                     [1, 5, 5, 6, 21], [1, 3, 3, 4, 21], [1, 1, 1, 4, 21]]
+            localisations: bbox regression outputs. The shape is
+                    [[1, 38, 38, 4, 4], [1, 19, 19, 6, 4], [1, 10, 10, 6, 4],
+                     [1, 5, 5, 6, 4], [1, 3, 3, 4, 4], [1, 1, 1, 4, 4]]
+            gclasses: Ground truth class?. It is a shape of
+                    [[1, 38, 38, 4], [1, 19, 19, 6], [1, 10, 10, 6],
+                     [1, 5, 5, 6], [1, 3, 3, 4], [1, 1, 1, 4]]
+            glocalisations: Same shape as `localisations`.
+
+        Returns:
+            A tensor for the total loss for the clone.  Can be None.
         """
         return ssd_losses(logits, localisations,
                           gclasses, glocalisations, gscores,
@@ -338,20 +354,26 @@ def ssd_anchor_one_layer(img_shape,
     # y = (y.astype(dtype) + offset) / feat_shape[0]
     # x = (x.astype(dtype) + offset) / feat_shape[1]
     # Weird SSD-Caffe computation using steps values...
+    # steps = [8, 16, 32, 64, 100, 300]
+    # img_shape[0] / steps = [37.5, 18.75, 9.375, 4.6875, 3, 1]
+    # ~ [38, 19, 10, 5, 3, 1] ?
     y, x = np.mgrid[0:feat_shape[0], 0:feat_shape[1]]
     y = (y.astype(dtype) + offset) * step / img_shape[0]
     x = (x.astype(dtype) + offset) * step / img_shape[1]
 
     # Expand dims to support easy broadcasting.
+    # (38, 38) => (38, 38, 1)
     y = np.expand_dims(y, axis=-1)
     x = np.expand_dims(x, axis=-1)
 
     # Compute relative height and width.
     # Tries to follow the original implementation of SSD for the order.
+    # len(sizes) counts scale=1 and scale=sqrt(s_k * s_(k+1))
     num_anchors = len(sizes) + len(ratios)
     h = np.zeros((num_anchors, ), dtype=dtype)
     w = np.zeros((num_anchors, ), dtype=dtype)
     # Add first anchor boxes with ratio=1.
+    # 0.07, 0.15, 0.33, 0.51, 0.69, 0.87 for respective layer
     h[0] = sizes[0] / img_shape[0]
     w[0] = sizes[0] / img_shape[1]
     di = 1
@@ -608,12 +630,14 @@ def ssd_losses(logits, localisations,
         flocalisations = []
         fglocalisations = []
         for i in range(len(logits)):
+            # e.g., reshape: [38, 38, 4, 21] => [5776, 21]
             flogits.append(tf.reshape(logits[i], [-1, num_classes]))
             fgclasses.append(tf.reshape(gclasses[i], [-1]))
             fgscores.append(tf.reshape(gscores[i], [-1]))
             flocalisations.append(tf.reshape(localisations[i], [-1, 4]))
             fglocalisations.append(tf.reshape(glocalisations[i], [-1, 4]))
         # And concat the crap!
+        # e.g., [5776 + 2166 + 600 + 150 + 150 + 36 + 4, 21] = [8732, 21]
         logits = tf.concat(flogits, axis=0)
         gclasses = tf.concat(fgclasses, axis=0)
         gscores = tf.concat(fgscores, axis=0)
@@ -649,22 +673,28 @@ def ssd_losses(logits, localisations,
 
         # Add cross-entropy loss.
         with tf.name_scope('cross_entropy_pos'):
+            # 1st term of Eq. (3)
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
                                                                   labels=gclasses)
             loss = tf.div(tf.reduce_sum(loss * fpmask), batch_size, name='value')
             tf.losses.add_loss(loss)
 
         with tf.name_scope('cross_entropy_neg'):
+            # 2nd term of Eq. (3)
             loss = tf.nn.sparse_softmax_cross_entropy_with_logits(logits=logits,
                                                                   labels=no_classes)
             loss = tf.div(tf.reduce_sum(loss * fnmask), batch_size, name='value')
             tf.losses.add_loss(loss)
 
         # Add localization loss: smooth L1, L2, ...
+        # Eq. (2)
         with tf.name_scope('localization'):
             # Weights Tensor: positive mask + random negative.
+            # Tensor:(8732,) => Tensor:(8732, 1)
             weights = tf.expand_dims(alpha * fpmask, axis=-1)
+            # Tensor:(8732,4) => Tensor:(4,)
             loss = custom_layers.abs_smooth(localisations - glocalisations)
+            # Tensor:(4,) => Tensor:()
             loss = tf.div(tf.reduce_sum(loss * weights), batch_size, name='value')
             tf.losses.add_loss(loss)
 

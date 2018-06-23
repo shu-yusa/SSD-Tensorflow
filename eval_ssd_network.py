@@ -179,6 +179,10 @@ def main(_):
 
             # Encode groundtruth labels and bboxes.
             # length = number of feature maps = len(ssd_anchors)
+            # gclasses: length * [layer_size, layer_size, # of boxes]
+            # glocalisations: length * [layer_size, layer_size, # of boxes, 4]
+            # gscores: length * [layer_size, layer_size, # of boxes]
+            # Ground truth value for every feature map cell and default boxes.
             gclasses, glocalisations, gscores = \
                 ssd_net.bboxes_encode(glabels, gbboxes, ssd_anchors)
             batch_shape = [1] * 5 + [len(ssd_anchors)] * 3

@@ -44,7 +44,16 @@ def tf_ssd_bboxes_encode_layer(labels,
       (target_labels, target_localizations, target_scores): Target Tensors.
     """
     # Anchors coordinates and volume.
+    # (xmin, ymin)
+    #   |------------------|
+    #   |                  |
+    #   |   (xref, yref)   |
+    #   |        *         |
+    #   |                  |
+    #   |                  |
+    #   |------------------| (xmax, ymax)
     yref, xref, href, wref = anchors_layer
+    # (38, 38, 1) => (38, 38, 4)
     ymin = yref - href / 2.
     xmin = xref - wref / 2.
     ymax = yref + href / 2.
@@ -63,6 +72,7 @@ def tf_ssd_bboxes_encode_layer(labels,
 
     def jaccard_with_anchors(bbox):
         """Compute jaccard score between a box and the anchors.
+        Compute overlap for every pixel.
         """
         int_ymin = tf.maximum(ymin, bbox[0])
         int_xmin = tf.maximum(xmin, bbox[1])
@@ -105,12 +115,17 @@ def tf_ssd_bboxes_encode_layer(labels,
           - only update if beat the score of other bboxes.
         """
         # Jaccard score.
+        # Ground truth label and bounding box
         label = labels[i]
+        # Tensor: (4,)
         bbox = bboxes[i]
+        # Tensor: (38, 38, 4) (for the first layer)
         jaccard = jaccard_with_anchors(bbox)
         # Mask: check threshold + scores + no annotations + num_classes.
+        # (38, 38, 4)
         mask = tf.greater(jaccard, feat_scores)
         # mask = tf.logical_and(mask, tf.greater(jaccard, matching_threshold))
+        # ?
         mask = tf.logical_and(mask, feat_scores > -0.5)
         mask = tf.logical_and(mask, label < num_classes)
         imask = tf.cast(mask, tf.int64)
@@ -119,6 +134,7 @@ def tf_ssd_bboxes_encode_layer(labels,
         feat_labels = imask * label + (1 - imask) * feat_labels
         feat_scores = tf.where(mask, jaccard, feat_scores)
 
+        # if overlap is larger, fmask=1 and update by bbox.
         feat_ymin = fmask * bbox[0] + (1 - fmask) * feat_ymin
         feat_xmin = fmask * bbox[1] + (1 - fmask) * feat_xmin
         feat_ymax = fmask * bbox[2] + (1 - fmask) * feat_ymax
@@ -133,7 +149,10 @@ def tf_ssd_bboxes_encode_layer(labels,
 
         return [i+1, feat_labels, feat_scores,
                 feat_ymin, feat_xmin, feat_ymax, feat_xmax]
-    # Main loop definition.
+    # Main loop definition. Loop over objects in an image.
+    # For every default bounding box at every cell in a feature map,
+    # ground truth lable and box, which has the maximum overlap(score) with the
+    # default box is chosen.
     i = 0
     [i, feat_labels, feat_scores,
      feat_ymin, feat_xmin,
@@ -152,6 +171,7 @@ def tf_ssd_bboxes_encode_layer(labels,
     feat_h = tf.log(feat_h / href) / prior_scaling[2]
     feat_w = tf.log(feat_w / wref) / prior_scaling[3]
     # Use SSD ordering: x / y / w / h instead of ours.
+    # (38, 38, 4, 4)
     feat_localizations = tf.stack([feat_cx, feat_cy, feat_w, feat_h], axis=-1)
     return feat_labels, feat_localizations, feat_scores
 
@@ -179,6 +199,14 @@ def tf_ssd_bboxes_encode(labels,
       (target_labels, target_localizations, target_scores):
         Each element is a list of target Tensors.
     """
+    # anchors: 6 dim List
+    # [[[38, 38, 1], [38, 38, 1], [4], [4]],
+    #  [[19, 19, 1], [19, 19, 1], [6], [6]],
+    #  [[10, 10, 1], [10, 10, 1], [6], [6]],
+    #  [[5, 5, 1], [5, 5, 1], [6], [6]],
+    #  [[3, 3, 1], [3, 3, 1], [4], [4]],
+    #  [[1, 1, 1], [1, 1, 1], [4], [4]]]
+    # anchors[i] = [y grid, x grid, w scales/ratios, h scales/ratios]
     with tf.name_scope(scope):
         target_labels = []
         target_localizations = []
