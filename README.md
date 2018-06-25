@@ -53,6 +53,7 @@ The present TensorFlow implementation of SSD models have the following performan
 
 | Model | Training data  | Testing data | mAP | FPS  |
 |--------|:---------:|:------:|:------:|:------:|
+| [SSD-300 VGG-based](https://github.com/balancap/SSD-Tensorflow/blob/master/checkpoints/ssd_300_vgg.ckpt.zip) | ??? | ??? | ??? | - |
 | [SSD-300 VGG-based](https://drive.google.com/open?id=0B0qPCUZ-3YwWZlJaRTRRQWRFYXM) | VOC07+12 trainval | VOC07 test | 0.778 | - |
 | [SSD-300 VGG-based](https://drive.google.com/file/d/0B0qPCUZ-3YwWUXh4UHJrd1RDM3c/view?usp=sharing) | VOC07+12+COCO trainval | VOC07 test | 0.817 | - |
 | [SSD-512 VGG-based](https://drive.google.com/open?id=0B0qPCUZ-3YwWT1RCLVZNN3RTVEU) | VOC07+12+COCO trainval | VOC07 test | 0.837 | - |
